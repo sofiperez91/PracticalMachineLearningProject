@@ -1,0 +1,172 @@
+---
+title: "Practical Machine Learning Course Project"
+author: "Sofia Perez"
+date: "11/4/2021"
+output: html_document
+---
+
+## Summary
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. 
+
+In this project, we will use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. 
+
+The goal of this project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. 
+
+## Getting and Cleaning Data 
+
+### Loading Data
+
+```{r}
+train_data <- read.csv("pml-training.csv")
+valid_data  <- read.csv("pml-testing.csv")
+```
+
+### Cleaning Data
+
+Removing NA values:
+  
+  ```{r}
+training<- train_data[, colSums(is.na(train_data)) == 0]
+validating <- valid_data[, colSums(is.na(valid_data)) == 0]
+dim(training)
+dim(validating)
+```
+
+Removing irrelevant data (first seven columns):
+  
+  ```{r}
+training <- training[, -c(1:7)]
+validating <- validating[, -c(1:7)]
+dim(training)
+dim(validating)
+```
+
+### Creating Partitions
+The training data will be splited into 70% train data and 30% as test data, as follows:
+  
+  ```{r}
+library(caret)
+inTrain  <- createDataPartition(training$classe, p=0.7, list=FALSE)
+training <- training[inTrain, ]
+testing  <- training[-inTrain, ]
+dim(training) 
+dim(testing)
+```
+
+### Near zero variance
+
+Removing near zero variance variables:
+  ```{r}
+nzv <- nearZeroVar(training)
+training <- training[, -nzv]
+testing  <- testing[, -nzv]
+dim(training)
+dim(testing)
+```
+
+## Correlation Analysis
+
+Correlation is analyzed in the graph below, dark colors represent high correlated variables.
+
+```{r}
+library(corrplot)
+cor_mx <- cor(training[, -53])
+corrplot(cor_mx, order = "FPC", method = "color", type = "lower", tl.cex = 0.8, tl.col = rgb(0, 0, 0))
+```
+
+## Creating Model
+
+For this project we will use different algorithms to predict the outcome and select the one with better accuracy:
+  
+1- Random Forest
+2- Generalized Boosted Trees
+2- Decision Tree
+4- Support Vector Machine
+
+```{r}
+set.seed(12345)
+control <- trainControl(method="cv", number=3, verboseIter=FALSE)
+```
+
+### Random Forest
+
+```{r}
+Mod_RF <- train(classe ~ ., data=training, method="rf", trControl=control)
+Mod_RF$finalModel
+
+Pred_RF <- predict(Mod_RF, testing)
+confusionMatrix(Pred_RF, factor(testing$classe))
+```
+```{r echo=FALSE}
+plot(Mod_RF)
+```
+
+### Generalized Boosted Trees
+
+```{r}
+library(caret)
+Mod_gbm <- train(classe ~ ., data=training, method="gbm", trControl = control, tuneLength = 5, verbose = FALSE)
+
+Pred_gbm <- predict(Mod_gbm, testing)
+confusionMatrix(Pred_gbm, factor(testing$classe))
+```
+```{r echo=FALSE}
+plot(Mod_gbm)
+```
+
+### Decision Trees
+
+```{r}
+library(rattle)
+Mod_trees <- train(classe ~ ., data=training, method="rpart", trControl = control, tuneLength = 5)
+Pred_trees <- predict(Mod_trees, testing)
+confusionMatrix(Pred_trees, factor(testing$classe))
+```
+```{r echo=FALSE}
+library(lattice)
+library(ggplot2)
+library(rattle)
+plot(Mod_trees)
+fancyRpartPlot(Mod_trees$finalModel)
+```
+
+### Support Vector Machine
+
+```{r}
+Mod_svm <- train(classe ~ ., data=training, method="svmLinear", trControl = control, tuneLength = 5, verbose = FALSE)
+
+Pred_svm <- predict(Mod_svm, testing)
+confusionMatrix(Pred_svm, factor(testing$classe))
+```
+
+## Selecting Model
+
+The accuracy of the models above is:
+
+  ```{r echo=FALSE}
+library(knitr)
+cmatrix<-c(confusionMatrix(Pred_RF,factor(testing$classe))$overall['Accuracy'],confusionMatrix(Pred_gbm,factor(testing$classe))$overall['Accuracy'],confusionMatrix(Pred_trees,factor(testing$classe))$overall['Accuracy'],confusionMatrix(Pred_svm,factor(testing$classe))$overall['Accuracy'])
+names(cmatrix)<-c("Random Forest","GBM","Decision Tree","SVM")
+model_acc<-data.frame(cmatrix)
+colnames(model_acc)<-c("Accuracy")
+kable(model_acc)
+```
+
+## Applying Model
+
+After comparing the different models, we can conclude that Random Forest Model is more accurate and should be chosen.
+
+### Applying Random Forest on Validation Data
+
+```{r}
+library(knitr)
+Pred <- predict(Mod_RF, validating)
+Results<-data.frame(cbind(valid_data[,1:2],Pred))
+colnames(Results)<-c("id","user_name","Pred_classe")
+kable(Results,align = "l",padding = 5, format='html')
+```
+
+
+
+
